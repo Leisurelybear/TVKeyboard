@@ -15,27 +15,22 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.tvkeyboard.R;
 import com.tvkeyboard.common.NetworkUtils;
 import com.tvkeyboard.common.QrCodeGenerator;
+import com.tvkeyboard.common.TvHttpServer;
 import com.tvkeyboard.common.TvWebSocketServer;
 
 /**
- * TV-side input screen.
- * Shows QR code for phone to scan, displays real-time typed text,
- * and provides Confirm / Dismiss buttons.
+ * TV standalone activity (App mode, not IME).
+ * Hosts both HTTP + WebSocket servers.
+ * Phone scans QR → opens browser → types → text syncs here.
  */
 public class TvInputActivity extends AppCompatActivity implements TvWebSocketServer.Listener {
 
-    private static final int QR_SIZE_DP = 240;
-
     private ImageView ivQrCode;
-    private TextView tvInputText;
-    private TextView tvPlaceholder;
-    private TextView tvClientStatus;
-    private TextView tvIpAddress;
-    private Button btnConfirm;
-    private Button btnDismiss;
-    private Button btnClear;
+    private TextView tvInputText, tvPlaceholder, tvClientStatus, tvIpAddress, tvUrl;
+    private Button btnConfirm, btnDismiss, btnClear;
 
     private TvWebSocketServer wsServer;
+    private TvHttpServer httpServer;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private String currentText = "";
 
@@ -44,145 +39,120 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_tv_input);
 
-        ivQrCode = findViewById(R.id.iv_qr_code);
-        tvInputText = findViewById(R.id.tv_input_text);
-        tvPlaceholder = findViewById(R.id.tv_placeholder);
+        ivQrCode       = findViewById(R.id.iv_qr_code);
+        tvInputText    = findViewById(R.id.tv_input_text);
+        tvPlaceholder  = findViewById(R.id.tv_placeholder);
         tvClientStatus = findViewById(R.id.tv_client_status);
-        tvIpAddress = findViewById(R.id.tv_ip_address);
-        btnConfirm = findViewById(R.id.btn_confirm);
-        btnDismiss = findViewById(R.id.btn_dismiss);
-        btnClear = findViewById(R.id.btn_clear);
+        tvIpAddress    = findViewById(R.id.tv_ip_address);
+        tvUrl          = findViewById(R.id.tv_url);
+        btnConfirm     = findViewById(R.id.btn_confirm);
+        btnDismiss     = findViewById(R.id.btn_dismiss);
+        btnClear       = findViewById(R.id.btn_clear);
 
         btnConfirm.setOnClickListener(v -> onConfirm());
-        btnDismiss.setOnClickListener(v -> onDismiss());
+        btnDismiss.setOnClickListener(v -> finish());
         btnClear.setOnClickListener(v -> onClear());
 
-        startServer();
+        startServers();
     }
 
-    private void startServer() {
+    private void startServers() {
         String ip = NetworkUtils.getLocalIpAddress(this);
-        int port = TvWebSocketServer.DEFAULT_PORT;
+        String url = NetworkUtils.buildQrContent(ip, TvHttpServer.HTTP_PORT);
 
-        tvIpAddress.setText(ip + ":" + port);
+        tvIpAddress.setText(ip);
+        if (tvUrl != null) tvUrl.setText(url);
 
-        // Generate QR code
-        String qrContent = NetworkUtils.buildQrContent(ip, port);
-        int sizePx = (int) (QR_SIZE_DP * getResources().getDisplayMetrics().density);
-        Bitmap qrBitmap = QrCodeGenerator.generate(qrContent, sizePx);
-        if (qrBitmap != null) {
-            ivQrCode.setImageBitmap(qrBitmap);
+        int sizePx = (int) (220 * getResources().getDisplayMetrics().density);
+        Bitmap bmp = QrCodeGenerator.generate(url, sizePx);
+        if (bmp != null) ivQrCode.setImageBitmap(bmp);
+
+        wsServer = new TvWebSocketServer(TvWebSocketServer.DEFAULT_PORT, this);
+        wsServer.setConnectionLostTimeout(30);
+        try { wsServer.start(); } catch (Exception e) {
+            Toast.makeText(this, "WebSocket 启动失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
 
-        // Start WebSocket server
-        wsServer = new TvWebSocketServer(port, this);
-        wsServer.setConnectionLostTimeout(30);
-        try {
-            wsServer.start();
-        } catch (Exception e) {
-            Toast.makeText(this, "服务启动失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        httpServer = new TvHttpServer(TvWebSocketServer.DEFAULT_PORT);
+        try { httpServer.start(); } catch (Exception e) {
+            Toast.makeText(this, "HTTP 服务启动失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
     // ---- WebSocket callbacks ----
 
     @Override
-    public void onClientConnected(String clientIp) {
+    public void onClientConnected(String sessionId, String clientIp) {
         mainHandler.post(() -> {
-            tvClientStatus.setText("手机已连接: " + clientIp);
+            int count = wsServer != null ? wsServer.getConnectedClientCount() : 1;
+            tvClientStatus.setText(count + " 人已连接 ✓");
             tvClientStatus.setTextColor(getResources().getColor(android.R.color.holo_green_dark));
         });
     }
 
     @Override
-    public void onClientDisconnected(String clientIp) {
+    public void onClientDisconnected(String sessionId, int remaining) {
         mainHandler.post(() -> {
-            int count = wsServer != null ? wsServer.getConnectedClientCount() : 0;
-            if (count == 0) {
-                tvClientStatus.setText("等待手机连接...");
+            if (remaining == 0) {
+                tvClientStatus.setText("等待扫码连接...");
                 tvClientStatus.setTextColor(getResources().getColor(android.R.color.darker_gray));
+            } else {
+                tvClientStatus.setText(remaining + " 人已连接");
             }
         });
     }
 
     @Override
-    public void onTextReceived(String text) {
+    public void onTextReceived(String text, String sessionId) {
         currentText = text;
         mainHandler.post(() -> updateInputDisplay(text));
     }
 
     @Override
-    public void onActionReceived(String action) {
+    public void onActionReceived(String action, String sessionId) {
         mainHandler.post(() -> {
             switch (action) {
-                case "confirm":
-                    onConfirm();
-                    break;
+                case "confirm":   onConfirm(); break;
                 case "backspace":
                     if (!currentText.isEmpty()) {
                         currentText = currentText.substring(0, currentText.length() - 1);
                         updateInputDisplay(currentText);
-                        if (wsServer != null) wsServer.broadcastCurrentText(currentText);
+                        if (wsServer != null) wsServer.broadcastSync(currentText, "tv");
                     }
                     break;
-                case "clear":
-                    onClear();
-                    break;
-                case "dismiss":
-                    onDismiss();
-                    break;
+                case "clear":   onClear(); break;
+                case "dismiss": finish(); break;
             }
         });
     }
 
-    // ---- Button handlers ----
-
     private void onConfirm() {
-        // In IME mode this would commit text; here we just show a toast
         Toast.makeText(this, "已确认: " + currentText, Toast.LENGTH_SHORT).show();
         if (wsServer != null) wsServer.broadcastAction("confirmed");
-        // Optionally clear after confirm
-        // currentText = "";
-        // updateInputDisplay("");
     }
 
     private void onClear() {
         currentText = "";
         updateInputDisplay("");
-        if (wsServer != null) wsServer.broadcastCurrentText("");
+        if (wsServer != null) {
+            wsServer.broadcastSync("", "tv");
+            wsServer.broadcastAction("cleared");
+        }
     }
-
-    private void onDismiss() {
-        if (wsServer != null) wsServer.broadcastAction("dismissed");
-        finish();
-    }
-
-    // ---- UI update ----
 
     private void updateInputDisplay(String text) {
-        if (text == null || text.isEmpty()) {
-            tvInputText.setVisibility(View.GONE);
-            tvPlaceholder.setVisibility(View.VISIBLE);
-        } else {
-            tvInputText.setVisibility(View.VISIBLE);
-            tvPlaceholder.setVisibility(View.GONE);
-            tvInputText.setText(text);
-        }
-
-        // Show cursor blink effect
-        btnConfirm.setEnabled(!text.isEmpty());
-        btnClear.setEnabled(!text.isEmpty());
+        boolean empty = text == null || text.isEmpty();
+        tvInputText.setVisibility(empty ? View.GONE : View.VISIBLE);
+        tvPlaceholder.setVisibility(empty ? View.VISIBLE : View.GONE);
+        if (!empty) tvInputText.setText(text);
+        btnConfirm.setEnabled(!empty);
+        btnClear.setEnabled(!empty);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (wsServer != null) {
-            try {
-                wsServer.stop(1000);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+        if (wsServer != null) try { wsServer.stop(1000); } catch (Exception ignored) {}
+        if (httpServer != null) httpServer.stop();
     }
 }

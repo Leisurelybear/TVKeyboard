@@ -5,26 +5,35 @@ import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 
 import java.net.InetSocketAddress;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * WebSocket server running on TV side.
- * Receives text input from phone clients and broadcasts state back.
+ *
+ * Multi-user strategy: "last writer wins"
+ * - Each browser tab sends a unique sessionId in every message
+ * - When text arrives, it's applied immediately and broadcast to all
+ * - All sessions receive sync so their textarea stays consistent
+ * - Session count is broadcast so web UI can warn about concurrent editors
  */
 public class TvWebSocketServer extends WebSocketServer {
 
     public static final int DEFAULT_PORT = 8765;
 
     public interface Listener {
-        void onClientConnected(String clientIp);
-        void onClientDisconnected(String clientIp);
-        void onTextReceived(String text);
-        void onActionReceived(String action); // "confirm", "backspace", "clear", "dismiss"
+        void onClientConnected(String sessionId, String clientIp);
+        void onClientDisconnected(String sessionId, int remaining);
+        void onTextReceived(String text, String sessionId);
+        void onActionReceived(String action, String sessionId);
     }
 
     private final Listener listener;
-    private final Set<WebSocket> clients = new HashSet<>();
+
+    // conn → sessionId
+    private final Map<WebSocket, String> sessionMap = new ConcurrentHashMap<>();
+    // sessionId → conn
+    private final Map<String, WebSocket> connMap = new ConcurrentHashMap<>();
 
     public TvWebSocketServer(int port, Listener listener) {
         super(new InetSocketAddress(port));
@@ -34,31 +43,49 @@ public class TvWebSocketServer extends WebSocketServer {
 
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        clients.add(conn);
-        String ip = conn.getRemoteSocketAddress().getAddress().getHostAddress();
-        if (listener != null) listener.onClientConnected(ip);
+        String tempId = "tmp_" + System.currentTimeMillis();
+        sessionMap.put(conn, tempId);
     }
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        clients.remove(conn);
-        String ip = conn.getRemoteSocketAddress().getAddress().getHostAddress();
-        if (listener != null) listener.onClientDisconnected(ip);
+        String sessionId = sessionMap.remove(conn);
+        if (sessionId != null) connMap.remove(sessionId);
+        int remaining = sessionMap.size();
+        broadcastSessionCount();
+        if (listener != null) listener.onClientDisconnected(sessionId, remaining);
     }
 
     @Override
     public void onMessage(WebSocket conn, String message) {
-        if (listener == null) return;
-        // Protocol: {"type":"text","value":"hello"} or {"type":"action","value":"confirm"}
         try {
-            if (message.contains("\"type\":\"text\"")) {
-                String value = extractJsonValue(message, "value");
-                listener.onTextReceived(value);
-                // Echo current text to all clients
-                broadcastCurrentText(value);
-            } else if (message.contains("\"type\":\"action\"")) {
-                String value = extractJsonValue(message, "value");
-                listener.onActionReceived(value);
+            String type = extractJsonValue(message, "type");
+            String sessionId = extractJsonValue(message, "sessionId");
+
+            if (!sessionId.isEmpty()) {
+                String oldId = sessionMap.get(conn);
+                if (oldId != null && !oldId.equals(sessionId)) connMap.remove(oldId);
+                sessionMap.put(conn, sessionId);
+                connMap.put(sessionId, conn);
+            } else {
+                sessionId = sessionMap.getOrDefault(conn, "unknown");
+            }
+
+            switch (type) {
+                case "hello":
+                    broadcastSessionCount();
+                    String ip = conn.getRemoteSocketAddress().getAddress().getHostAddress();
+                    if (listener != null) listener.onClientConnected(sessionId, ip);
+                    break;
+                case "text":
+                    String text = extractJsonValue(message, "value");
+                    if (listener != null) listener.onTextReceived(text, sessionId);
+                    broadcastSync(text, sessionId);
+                    break;
+                case "action":
+                    String action = extractJsonValue(message, "value");
+                    if (listener != null) listener.onActionReceived(action, sessionId);
+                    break;
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -71,36 +98,37 @@ public class TvWebSocketServer extends WebSocketServer {
     }
 
     @Override
-    public void onStart() {
-        // Server started
+    public void onStart() {}
+
+    // ---- Broadcast helpers ----
+
+    public void broadcastSync(String text, String originSessionId) {
+        String msg = "{\"type\":\"sync\""
+                + ",\"value\":\"" + escapeJson(text) + "\""
+                + ",\"sessionId\":\"" + escapeJson(originSessionId) + "\"}";
+        broadcast(msg);
     }
 
-    /**
-     * Broadcast current text state to all connected phone clients
-     */
-    public void broadcastCurrentText(String text) {
-        String msg = "{\"type\":\"sync\",\"value\":\"" + escapeJson(text) + "\"}";
-        for (WebSocket client : clients) {
-            if (client.isOpen()) {
-                client.send(msg);
-            }
-        }
+    public void broadcastSessionCount() {
+        String msg = "{\"type\":\"sessions\",\"count\":" + sessionMap.size() + "}";
+        broadcast(msg);
     }
 
-    /**
-     * Notify phone that TV confirmed/dismissed input
-     */
     public void broadcastAction(String action) {
         String msg = "{\"type\":\"action\",\"value\":\"" + action + "\"}";
-        for (WebSocket client : clients) {
-            if (client.isOpen()) {
-                client.send(msg);
+        broadcast(msg);
+    }
+
+    public void broadcast(String msg) {
+        for (WebSocket conn : sessionMap.keySet()) {
+            if (conn.isOpen()) {
+                try { conn.send(msg); } catch (Exception ignored) {}
             }
         }
     }
 
     public int getConnectedClientCount() {
-        return clients.size();
+        return sessionMap.size();
     }
 
     private String extractJsonValue(String json, String key) {
@@ -114,18 +142,13 @@ public class TvWebSocketServer extends WebSocketServer {
     }
 
     private String escapeJson(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private String unescapeJson(String s) {
-        return s.replace("\\\"", "\"")
-                .replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t")
-                .replace("\\\\", "\\");
+        return s.replace("\\\"", "\"").replace("\\n", "\n")
+                .replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\");
     }
 }
