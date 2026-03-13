@@ -1,0 +1,4 @@
+-keep class org.java_websocket.** { *; }
+-keep class com.google.zxing.** { *; }
+-keep class com.journeyapps.** { *; }
+-dontwarn org.java_websocket.**

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TVKeyboard" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#5C6BC0</item>
+        <item name="colorPrimaryVariant">#3949AB</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#26A69A</item>
+        <item name="android:windowBackground">#0F0F23</item>
+        <item name="android:statusBarColor">#0F0F23</item>
+        <item name="android:navigationBarColor">#0F0F23</item>
+    </style>
+
+    <!-- TV mode: full screen, landscape optimized -->
+    <style name="Theme.TVKeyboard.TV" parent="Theme.TVKeyboard">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

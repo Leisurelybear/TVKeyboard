@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.tvkeyboard'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.tvkeyboard"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    // WebSocket server (NanoHTTPD based WebSocket)
+    implementation 'org.java-websocket:Java-WebSocket:1.5.4'
+    // QR Code generation
+    implementation 'com.google.zxing:core:3.5.2'
+    // 【关键修改】升级 zxing-android-embedded 到兼容 Gradle 8.x 的版本
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    // 可选：添加 zxing 依赖约束，避免版本冲突
+    constraints {
+        implementation 'com.google.zxing:core:3.5.2'
+    }
+}

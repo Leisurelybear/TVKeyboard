@@ -1,0 +1,19 @@
+# Gradle
+.gradle/
+build/
+gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio
+.idea/
+*.iml
+local.properties
+
+# APK / 构建产物
+app/build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# 日志
+*.log
