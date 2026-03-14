@@ -15,9 +15,9 @@ public class PhoneWebSocketClient extends WebSocketClient {
         void onConnected();
         void onDisconnected(String reason);
         void onSyncReceived(String text);
+        void onSessionsUpdate(int count);
         void onActionReceived(String action);
         void onError(String message);
-        default void onSessionsUpdate(int count) {}
     }
 
     private final Listener listener;

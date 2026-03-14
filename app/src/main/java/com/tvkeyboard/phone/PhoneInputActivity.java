@@ -9,7 +9,6 @@ import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,10 +18,6 @@ import com.tvkeyboard.R;
 import com.tvkeyboard.common.PhoneWebSocketClient;
 import com.tvkeyboard.common.TvWebSocketServer;
 
-/**
- * Phone-side input screen.
- * After connecting to TV, user types here and input is synced to TV in real time.
- */
 public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSocketClient.Listener {
 
     private static final int REQUEST_QR_SCAN = 100;
@@ -32,64 +27,86 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     private TextView tvTvPreview;
     private Button btnConfirm;
     private Button btnDiscard;
-    private ImageButton btnBackspace;
-    private ImageButton btnClear;
+    private Button btnBackspace;
+    private Button btnClear;
     private Button btnScan;
+    private Button btnBack;
+    private Button btnDpadUp, btnDpadDown, btnDpadLeft, btnDpadRight, btnDpadCenter;
     private View layoutConnected;
     private View layoutDisconnected;
 
     private PhoneWebSocketClient wsClient;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private boolean isConnecting = false;
-    private String pendingText = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_phone_input);
 
-        etInput = findViewById(R.id.et_input);
-        tvStatus = findViewById(R.id.tv_status);
-        tvTvPreview = findViewById(R.id.tv_tv_preview);
-        btnConfirm = findViewById(R.id.btn_confirm);
-        btnDiscard = findViewById(R.id.btn_discard);
-        btnBackspace = findViewById(R.id.btn_backspace);
-        btnClear = findViewById(R.id.btn_clear);
-        btnScan = findViewById(R.id.btn_scan);
-        layoutConnected = findViewById(R.id.layout_connected);
+        etInput          = findViewById(R.id.et_input);
+        tvStatus         = findViewById(R.id.tv_status);
+        tvTvPreview      = findViewById(R.id.tv_tv_preview);
+        btnConfirm       = findViewById(R.id.btn_confirm);
+        btnDiscard       = findViewById(R.id.btn_discard);
+        btnBackspace     = findViewById(R.id.btn_backspace);
+        btnClear         = findViewById(R.id.btn_clear);
+        btnScan          = findViewById(R.id.btn_scan);
+        btnBack          = findViewById(R.id.btn_back);
+        btnDpadUp        = findViewById(R.id.btn_dpad_up);
+        btnDpadDown      = findViewById(R.id.btn_dpad_down);
+        btnDpadLeft      = findViewById(R.id.btn_dpad_left);
+        btnDpadRight     = findViewById(R.id.btn_dpad_right);
+        btnDpadCenter    = findViewById(R.id.btn_dpad_center);
+        layoutConnected  = findViewById(R.id.layout_connected);
         layoutDisconnected = findViewById(R.id.layout_disconnected);
 
         showDisconnected();
 
-        btnScan.setOnClickListener(v -> {
-            Intent intent = new Intent(this, QrScanActivity.class);
-            startActivityForResult(intent, REQUEST_QR_SCAN);
-        });
+        // 扫码连接
+        btnScan.setOnClickListener(v ->
+                startActivityForResult(new Intent(this, QrScanActivity.class), REQUEST_QR_SCAN));
 
-        btnConfirm.setOnClickListener(v -> {
-            if (wsClient != null) wsClient.sendAction("confirm");
-            Toast.makeText(this, "已发送确认", Toast.LENGTH_SHORT).show();
-        });
+        // 确认输入
+        btnConfirm.setOnClickListener(v -> sendAction("confirm"));
 
+        // 取消
         btnDiscard.setOnClickListener(v -> {
-            if (wsClient != null) wsClient.sendAction("dismiss");
+            sendAction("dismiss");
             finish();
         });
 
+        // 退格（本地 + 同步）
         btnBackspace.setOnClickListener(v -> {
             String text = etInput.getText().toString();
             if (!text.isEmpty()) {
                 text = text.substring(0, text.length() - 1);
                 etInput.setText(text);
                 etInput.setSelection(text.length());
+                // 同步给电视（TextWatcher 会触发）
+            } else {
+                // 输入框已空，让电视执行退格
+                sendAction("backspace");
             }
         });
 
+        // 清空
         btnClear.setOnClickListener(v -> {
             etInput.setText("");
+            sendAction("clear");
         });
 
-        // Real-time text sync
+        // 返回键 → 电视执行返回
+        btnBack.setOnClickListener(v -> sendAction("back"));
+
+        // 方向键
+        btnDpadUp.setOnClickListener(v    -> sendAction("dpad_up"));
+        btnDpadDown.setOnClickListener(v  -> sendAction("dpad_down"));
+        btnDpadLeft.setOnClickListener(v  -> sendAction("dpad_left"));
+        btnDpadRight.setOnClickListener(v -> sendAction("dpad_right"));
+        // OK键 = 确认输入
+        btnDpadCenter.setOnClickListener(v -> sendAction("confirm"));
+
+        // 实时同步文字
         etInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
             @Override public void afterTextChanged(Editable s) {}
@@ -100,22 +117,27 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
                     wsClient.sendText(text);
                 }
                 btnConfirm.setEnabled(!text.isEmpty());
-                btnClear.setEnabled(!text.isEmpty());
             }
         });
+    }
+
+    private void sendAction(String action) {
+        if (wsClient != null && wsClient.isOpen()) {
+            wsClient.sendAction(action);
+        } else {
+            Toast.makeText(this, "未连接到电视", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_QR_SCAN && resultCode == RESULT_OK && data != null) {
-            String qrContent = data.getStringExtra(QrScanActivity.EXTRA_QR_RESULT);
-            connectToTv(qrContent);
+            connectToTv(data.getStringExtra(QrScanActivity.EXTRA_QR_RESULT));
         }
     }
 
     private void connectToTv(String qrContent) {
-        com.tvkeyboard.common.NetworkUtils nu = null;
         String[] parts = com.tvkeyboard.common.NetworkUtils.parseQrContent(qrContent);
         if (parts == null) {
             Toast.makeText(this, "无效的二维码", Toast.LENGTH_SHORT).show();
@@ -123,42 +145,30 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         }
         String ip = parts[0];
         int port;
-        try {
-            port = Integer.parseInt(parts[1]);
-        } catch (Exception e) {
-            port = TvWebSocketServer.DEFAULT_PORT;
-        }
+        try { port = Integer.parseInt(parts[1]); }
+        catch (Exception e) { port = TvWebSocketServer.DEFAULT_PORT; }
 
         tvStatus.setText("连接中... " + ip);
-        isConnecting = true;
-
-        final String finalIp = ip;
-        final int finalPort = port;
+        final String fIp = ip;
+        final int fPort = port;
         new Thread(() -> {
             try {
-                wsClient = new PhoneWebSocketClient(finalIp, finalPort, this);
+                wsClient = new PhoneWebSocketClient(fIp, fPort, this);
                 wsClient.connectBlocking();
             } catch (Exception e) {
-                mainHandler.post(() -> {
-                    tvStatus.setText("连接失败: " + e.getMessage());
-                    isConnecting = false;
-                });
+                mainHandler.post(() -> tvStatus.setText("连接失败: " + e.getMessage()));
             }
         }).start();
     }
 
-    // ---- WebSocket callbacks ----
+    // ---- WebSocket 回调 ----
 
     @Override
     public void onConnected() {
         mainHandler.post(() -> {
-            isConnecting = false;
             showConnected();
-            // Send any pending text
             String text = etInput.getText().toString();
-            if (!text.isEmpty() && wsClient != null) {
-                wsClient.sendText(text);
-            }
+            if (!text.isEmpty() && wsClient != null) wsClient.sendText(text);
         });
     }
 
@@ -172,18 +182,19 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
 
     @Override
     public void onSyncReceived(String text) {
-        // TV echoed back current text – could update preview
         mainHandler.post(() -> tvTvPreview.setText("电视显示: " + text));
     }
 
     @Override
     public void onActionReceived(String action) {
         mainHandler.post(() -> {
-            if ("confirmed".equals(action)) {
-                Toast.makeText(this, "电视已确认输入 ✓", Toast.LENGTH_SHORT).show();
-            } else if ("dismissed".equals(action)) {
-                Toast.makeText(this, "电视已关闭输入法", Toast.LENGTH_SHORT).show();
-                finish();
+            switch (action) {
+                case "confirmed":
+                    Toast.makeText(this, "电视已确认 ✓", Toast.LENGTH_SHORT).show();
+                    break;
+                case "dismissed":
+                    finish();
+                    break;
             }
         });
     }
@@ -193,12 +204,13 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         mainHandler.post(() -> Toast.makeText(this, "错误: " + message, Toast.LENGTH_SHORT).show());
     }
 
-    // ---- UI state ----
+    @Override
+    public void onSessionsUpdate(int count) {}
 
     private void showConnected() {
         layoutDisconnected.setVisibility(View.GONE);
         layoutConnected.setVisibility(View.VISIBLE);
-        tvStatus.setText("已连接到电视 ✓");
+        tvStatus.setText("已连接 ✓");
         etInput.requestFocus();
     }
 
@@ -211,12 +223,6 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (wsClient != null) {
-            try {
-                wsClient.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+        if (wsClient != null) try { wsClient.close(); } catch (Exception ignored) {}
     }
 }
