@@ -96,9 +96,12 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
-        currentText = "";
-        updateDisplay("");
-        if (wsServer != null) wsServer.broadcastSync("", "tv");
+        if (!restarting) {
+            // 只有全新打开才清空，restarting=true 表示重新显示不要清空
+            currentText = "";
+            updateDisplay("");
+            if (wsServer != null) wsServer.broadcastSync("", "tv");
+        }
     }
 
     // ── Remote control key interception ──────────────────────────────────────
@@ -111,9 +114,14 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         }
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             requestHideSelf(0);
-            return true;
+            return super.onKeyDown(keyCode, event);
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onShowInputRequested(int flags, boolean configChange) {
+        return true;
     }
 
     // ── WebSocket.Listener callbacks ─────────────────────────────────────────
