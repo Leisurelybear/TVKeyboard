@@ -32,7 +32,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     private TvWebSocketServer wsServer;
     private TvHttpServer httpServer;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private boolean confirmKeyPressed;
+    private final ConfirmKeyEventTracker confirmKeyTracker = new ConfirmKeyEventTracker();
     private String currentText = "";
 
     // Views — no buttons in IME panel anymore
@@ -109,8 +109,8 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (isConfirmKey(keyCode)) {
-            if (event.getRepeatCount() == 0) confirmKeyPressed = true;
+        if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
+            confirmKeyTracker.onKeyDown(event.getRepeatCount());
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -122,18 +122,11 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if (isConfirmKey(keyCode)) {
-            if (confirmKeyPressed) {
-                confirmKeyPressed = false;
-                if (!event.isCanceled()) confirmInput();
-            }
+        if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
+            if (confirmKeyTracker.onKeyUp(event.isCanceled())) confirmInput();
             return true;
         }
         return super.onKeyUp(keyCode, event);
-    }
-
-    private boolean isConfirmKey(int keyCode) {
-        return keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_CENTER;
     }
 
     @Override
