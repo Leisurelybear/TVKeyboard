@@ -10,10 +10,12 @@ local.properties
 
 # APK / 构建产物
 app/build/
+app/release/
 *.apk
 *.aab
 *.keystore
 *.jks
+keystore.properties
 
 # 日志
 *.log

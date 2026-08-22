@@ -32,8 +32,35 @@ jobs:
         with:
           gradle-version: 8.2
 
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TVKEYBOARD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.TVKEYBOARD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TVKEYBOARD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TVKEYBOARD_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::TVKEYBOARD_KEYSTORE_BASE64 secret not set, APK will be debug-signed"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tvkeyboard-release.jks"
+          {
+            echo "SIGNING_ENABLED=true"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/tvkeyboard-release.jks"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "KEY_ALIAS=$KEY_ALIAS"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
       - name: Build release APK
         run: gradle --no-daemon assembleRelease
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/*.apk
 
       - name: Prepare release APK
         shell: bash

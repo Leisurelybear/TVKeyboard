@@ -1,6 +1,16 @@
+import java.util.Properties
+
 plugins {
     id 'com.android.application'
 }
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
+def envStoreFile = System.getenv('KEYSTORE_FILE')
 
 android {
     namespace 'com.tvkeyboard'
@@ -14,10 +24,32 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        release {
+            if (envStoreFile != null) {
+                storeFile file(envStoreFile)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            } else if (keystoreProperties['storeFile'] != null) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            } else {
+                println 'WARNING: release signing credentials not found, falling back to debug signing'
+                signingConfig signingConfigs.debug
+            }
         }
     }
     compileOptions {
