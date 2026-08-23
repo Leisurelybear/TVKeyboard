@@ -14,6 +14,7 @@
 
     <!-- ── Left column: QR code + connection status ── -->
     <LinearLayout
+        android:id="@+id/left_column"
         android:layout_width="200dp"
         android:layout_height="match_parent"
         android:orientation="vertical"
@@ -79,6 +80,7 @@
 
         <!-- Remote control hint card -->
         <LinearLayout
+            android:id="@+id/card_remote_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -136,6 +138,40 @@
                     android:textColor="#AAAACC" />
 
             </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/panel_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
+
+            <TextView
+                android:id="@+id/btn_size_toggle"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:gravity="center"
+                android:text="尺寸：75%"
+                android:textSize="13sp"
+                android:textColor="#DDDDEE"
+                android:focusable="true"
+                android:background="@drawable/btn_secondary_bg" />
+
+            <TextView
+                android:id="@+id/btn_switch_ime"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="切换输入法"
+                android:textSize="13sp"
+                android:textColor="#DDDDEE"
+                android:focusable="true"
+                android:background="@drawable/btn_secondary_bg" />
 
         </LinearLayout>
 
@@ -226,6 +262,7 @@
 
         <!-- Bottom hint strip -->
         <LinearLayout
+            android:id="@+id/bottom_strip"
             android:layout_width="match_parent"
             android:layout_height="36dp"
             android:orientation="horizontal"
