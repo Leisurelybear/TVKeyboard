@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -44,10 +45,23 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     private TextView tvIpAddress;
     private TextView tvSessionBadge;
 
+    private static final String PREFS_NAME = "ime_panel_prefs";
+    private static final String PREF_HEIGHT_FRACTION = "height_fraction";
+
+    private PanelSizeMode panelSizeMode = PanelSizeMode.TALL;
+    private TextView btnSizeToggle;
+    private TextView btnSwitchIme;
+    private View cardRemoteHint;
+    private View bottomStrip;
+    private View leftColumn;
+
     @Override
     public void onCreate() {
         super.onCreate();
         startServers();
+        panelSizeMode = PanelSizeMode.fromFraction(
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .getFloat(PREF_HEIGHT_FRACTION, PanelSizeMode.TALL.heightFraction));
     }
 
     private void startServers() {
@@ -63,11 +77,10 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     public View onCreateInputView() {
         inputView = LayoutInflater.from(this).inflate(R.layout.ime_tv_panel, null);
 
-        // 75% screen height — more room, still shows content above
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
         inputView.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (int) (screenHeight * 0.75f)
+                (int) (screenHeight * panelSizeMode.heightFraction)
         ));
 
         ivQrCode        = inputView.findViewById(R.id.iv_qr_code);
@@ -77,7 +90,23 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         tvIpAddress     = inputView.findViewById(R.id.tv_ip_address);
         tvSessionBadge  = inputView.findViewById(R.id.tv_session_badge);
 
-        // No buttons to wire up — remote control handles confirm & dismiss.
+        btnSizeToggle  = inputView.findViewById(R.id.btn_size_toggle);
+        btnSwitchIme   = inputView.findViewById(R.id.btn_switch_ime);
+        cardRemoteHint = inputView.findViewById(R.id.card_remote_hint);
+        bottomStrip    = inputView.findViewById(R.id.bottom_strip);
+        leftColumn     = inputView.findViewById(R.id.left_column);
+
+        btnSizeToggle.setOnClickListener(v -> {
+            panelSizeMode = panelSizeMode.next();
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putFloat(PREF_HEIGHT_FRACTION, panelSizeMode.heightFraction)
+                    .apply();
+            applySizeMode();
+        });
+        btnSwitchIme.setOnClickListener(v -> showImePicker());
+
+        applySizeMode();
 
         setupQrCode();
         return inputView;
@@ -92,6 +121,41 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         int sizePx = (int) (148 * getResources().getDisplayMetrics().density);
         Bitmap bmp = QrCodeGenerator.generate(url, sizePx);
         if (bmp != null && ivQrCode != null) ivQrCode.setImageBitmap(bmp);
+    }
+
+    private void applySizeMode() {
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        inputView.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (int) (screenHeight * panelSizeMode.heightFraction)
+        ));
+        if (btnSizeToggle != null) {
+            btnSizeToggle.setText("尺寸：" + panelSizeMode.displayName());
+        }
+        applyCompactMode();
+    }
+
+    private void applyCompactMode() {
+        if (cardRemoteHint == null || bottomStrip == null || leftColumn == null) return;
+        boolean compact = panelSizeMode.heightFraction <= PanelSizeMode.HALF.heightFraction;
+        boolean tiny = panelSizeMode == PanelSizeMode.QUARTER;
+
+        cardRemoteHint.setVisibility(compact ? View.GONE : View.VISIBLE);
+        bottomStrip.setVisibility(compact ? View.GONE : View.VISIBLE);
+
+        float density = getResources().getDisplayMetrics().density;
+        ViewGroup.LayoutParams qrLp = ivQrCode.getLayoutParams();
+        qrLp.width = (int) ((tiny ? 96 : 148) * density);
+        qrLp.height = qrLp.width;
+        ivQrCode.setLayoutParams(qrLp);
+
+        leftColumn.getLayoutParams().width = (int) ((tiny ? 160 : 200) * density);
+        leftColumn.requestLayout();
+    }
+
+    private void showImePicker() {
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.showInputMethodPicker();
     }
 
     @Override
@@ -111,6 +175,10 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
             confirmKeyTracker.onKeyDown(event.getRepeatCount());
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_MENU) {
+            showImePicker();
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_BACK) {
