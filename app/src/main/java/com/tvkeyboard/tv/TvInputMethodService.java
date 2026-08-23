@@ -136,7 +136,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     }
 
     private void applyCompactMode() {
-        if (cardRemoteHint == null || bottomStrip == null || leftColumn == null) return;
+        if (cardRemoteHint == null || bottomStrip == null || leftColumn == null || ivQrCode == null) return;
         boolean compact = panelSizeMode.heightFraction <= PanelSizeMode.HALF.heightFraction;
         boolean tiny = panelSizeMode == PanelSizeMode.QUARTER;
 
