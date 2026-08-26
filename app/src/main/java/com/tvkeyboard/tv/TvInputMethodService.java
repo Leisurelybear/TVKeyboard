@@ -289,8 +289,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     // ── Actions ──────────────────────────────────────────────────────────────
 
     private void confirmInput() {
-        if (getCurrentInputConnection() != null)
-            getCurrentInputConnection().performEditorAction(EditorInfo.IME_ACTION_DONE);
+        sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
         if (wsServer != null) wsServer.broadcastAction("confirmed");
         requestHideSelf(0);
     }
