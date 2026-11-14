@@ -16,7 +16,6 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.tvkeyboard.R;
 import com.tvkeyboard.common.PhoneWebSocketClient;
-import com.tvkeyboard.common.TvWebSocketServer;
 
 public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSocketClient.Listener {
 
@@ -79,7 +78,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         btnBackspace.setOnClickListener(v -> {
             String text = etInput.getText().toString();
             if (!text.isEmpty()) {
-                text = text.substring(0, text.length() - 1);
+                text = text.substring(0, text.offsetByCodePoints(text.length(), -1));
                 etInput.setText(text);
                 etInput.setSelection(text.length());
                 // 同步给电视（TextWatcher 会触发）
@@ -144,16 +143,16 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
             return;
         }
         String ip = parts[0];
-        int port;
-        try { port = Integer.parseInt(parts[1]); }
-        catch (Exception e) { port = TvWebSocketServer.DEFAULT_PORT; }
+        int port = 8765;
+        try { port = Integer.parseInt(parts[1]); } catch (Exception ignored) {}
+        String token = parts.length > 2 ? parts[2] : "";
 
         tvStatus.setText("连接中... " + ip);
         final String fIp = ip;
         final int fPort = port;
         new Thread(() -> {
             try {
-                wsClient = new PhoneWebSocketClient(fIp, fPort, this);
+                wsClient = new PhoneWebSocketClient(fIp, fPort, token, this);
                 wsClient.connectBlocking();
             } catch (Exception e) {
                 mainHandler.post(() -> tvStatus.setText("连接失败: " + e.getMessage()));

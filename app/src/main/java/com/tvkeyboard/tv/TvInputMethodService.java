@@ -18,6 +18,7 @@ import com.tvkeyboard.common.NetworkUtils;
 import com.tvkeyboard.common.QrCodeGenerator;
 import com.tvkeyboard.common.TvHttpServer;
 import com.tvkeyboard.common.TvWebSocketServer;
+import com.tvkeyboard.common.TvServerManager;
 
 /**
  * TV Input Method Service (IME mode).
@@ -38,6 +39,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
 
     // Views — no buttons in IME panel anymore
     private View inputView;
+    private boolean panelVisible;
     private ImageView ivQrCode;
     private TextView tvInputText;
     private TextView tvPlaceholder;
@@ -58,23 +60,19 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public void onCreate() {
         super.onCreate();
-        startServers();
         panelSizeMode = PanelSizeMode.fromFraction(
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                         .getFloat(PREF_HEIGHT_FRACTION, PanelSizeMode.TALL.heightFraction));
     }
 
     private void startServers() {
-        wsServer = new TvWebSocketServer(TvWebSocketServer.DEFAULT_PORT, this);
-        wsServer.setConnectionLostTimeout(30);
-        try { wsServer.start(); } catch (Exception e) { e.printStackTrace(); }
-
-        httpServer = new TvHttpServer(TvWebSocketServer.DEFAULT_PORT);
-        try { httpServer.start(); } catch (Exception e) { e.printStackTrace(); }
+        TvServerManager.register(this, this);
+        wsServer = TvServerManager.getWebSocketServer();
     }
 
     @Override
     public View onCreateInputView() {
+        startServers();
         inputView = LayoutInflater.from(this).inflate(R.layout.ime_tv_panel, null);
 
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
@@ -114,7 +112,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
 
     private void setupQrCode() {
         String ip = NetworkUtils.getLocalIpAddress(this);
-        String url = NetworkUtils.buildQrContent(ip, TvHttpServer.HTTP_PORT);
+        String url = NetworkUtils.buildQrContent(ip, TvHttpServer.HTTP_PORT, TvServerManager.getToken());
 
         if (tvIpAddress != null) tvIpAddress.setText(ip + ":" + TvHttpServer.HTTP_PORT);
 
@@ -161,6 +159,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
+        panelVisible = true;
         if (!restarting) {
             // 只有全新打开才清空，restarting=true 表示重新显示不要清空
             currentText = "";
@@ -174,6 +173,8 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
+            if (!panelVisible) return super.onKeyDown(keyCode, event);
+            if (inputView == null || inputView.getVisibility() != View.VISIBLE) return super.onKeyDown(keyCode, event);
             confirmKeyTracker.onKeyDown(event.getRepeatCount());
             return true;
         }
@@ -191,6 +192,8 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
+            if (!panelVisible) return super.onKeyUp(keyCode, event);
+            if (inputView == null || inputView.getVisibility() != View.VISIBLE) return super.onKeyUp(keyCode, event);
             if (confirmKeyTracker.onKeyUp(event.isCanceled())) confirmInput();
             return true;
         }
@@ -200,6 +203,12 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public boolean onShowInputRequested(int flags, boolean configChange) {
         return true;
+    }
+
+    @Override
+    public void onFinishInputView(boolean finishingInput) {
+        panelVisible = false;
+        super.onFinishInputView(finishingInput);
     }
 
     // ── WebSocket.Listener callbacks ─────────────────────────────────────────
@@ -239,8 +248,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         mainHandler.post(() -> {
             updateDisplay(text);
             if (getCurrentInputConnection() != null) {
-                getCurrentInputConnection().deleteSurroundingText(9999, 0);
-                getCurrentInputConnection().commitText(text, 1);
+                getCurrentInputConnection().setComposingText(text, 1);
             }
         });
     }
@@ -257,7 +265,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
                         currentText = currentText.substring(0, currentText.length() - 1);
                         updateDisplay(currentText);
                         if (getCurrentInputConnection() != null)
-                            getCurrentInputConnection().deleteSurroundingText(1, 0);
+                            getCurrentInputConnection().setComposingText(currentText, 1);
                         if (wsServer != null) wsServer.broadcastSync(currentText, "tv");
                     }
                     break;
@@ -289,6 +297,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     // ── Actions ──────────────────────────────────────────────────────────────
 
     private void confirmInput() {
+        if (getCurrentInputConnection() != null) getCurrentInputConnection().finishComposingText();
         sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
         if (wsServer != null) wsServer.broadcastAction("confirmed");
         requestHideSelf(0);
@@ -298,7 +307,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         currentText = "";
         updateDisplay("");
         if (getCurrentInputConnection() != null)
-            getCurrentInputConnection().deleteSurroundingText(9999, 0);
+            getCurrentInputConnection().setComposingText("", 1);
         if (wsServer != null) {
             wsServer.broadcastSync("", "tv");
             wsServer.broadcastAction("cleared");
@@ -316,7 +325,13 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (wsServer   != null) try { wsServer.stop(500);  } catch (Exception ignored) {}
-        if (httpServer != null) httpServer.stop();
+        TvServerManager.unregister(this);
+    }
+
+    private void deletePreviousCodePoint(android.view.inputmethod.InputConnection connection) {
+        CharSequence before = connection.getTextBeforeCursor(2, 0);
+        if (before == null || before.length() == 0) return;
+        int count = Character.charCount(Character.codePointBefore(before, before.length()));
+        connection.deleteSurroundingText(count, 0);
     }
 }

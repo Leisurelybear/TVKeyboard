@@ -21,17 +21,19 @@ public class PhoneWebSocketClient extends WebSocketClient {
     }
 
     private final Listener listener;
+    private final String authToken;
     private final String sessionId = "native_" + UUID.randomUUID().toString().substring(0, 8);
 
-    public PhoneWebSocketClient(String tvIp, int port, Listener listener) throws Exception {
+    public PhoneWebSocketClient(String tvIp, int port, String authToken, Listener listener) throws Exception {
         super(new URI("ws://" + tvIp + ":" + port));
+        this.authToken = authToken;
         this.listener = listener;
     }
 
     @Override
     public void onOpen(ServerHandshake handshakedata) {
         // Send hello with session ID
-        send("{\"type\":\"hello\",\"sessionId\":\"" + sessionId + "\"}");
+        send("{\"type\":\"hello\",\"sessionId\":\"" + JsonUtils.escape(sessionId) + "\",\"token\":\"" + JsonUtils.escape(authToken) + "\"}");
         if (listener != null) listener.onConnected();
     }
 
@@ -40,13 +42,13 @@ public class PhoneWebSocketClient extends WebSocketClient {
         if (listener == null) return;
         try {
             if (message.contains("\"type\":\"sync\"")) {
-                listener.onSyncReceived(extractValue(message, "value"));
+                listener.onSyncReceived(JsonUtils.extractString(message, "value"));
             } else if (message.contains("\"type\":\"sessions\"")) {
                 // extract count (numeric, not string)
                 String countStr = extractNumeric(message, "count");
-                listener.onSessionsUpdate(Integer.parseInt(countStr));
+                listener.onSessionsUpdate(JsonUtils.extractInt(message, "count"));
             } else if (message.contains("\"type\":\"action\"")) {
-                listener.onActionReceived(extractValue(message, "value"));
+                listener.onActionReceived(JsonUtils.extractString(message, "value"));
             }
         } catch (Exception e) { e.printStackTrace(); }
     }
@@ -62,13 +64,13 @@ public class PhoneWebSocketClient extends WebSocketClient {
     }
 
     public void sendText(String text) {
-        if (isOpen()) send("{\"type\":\"text\",\"value\":\"" + escape(text)
-                + "\",\"sessionId\":\"" + sessionId + "\"}");
+        if (isOpen()) send("{\"type\":\"text\",\"value\":\"" + JsonUtils.escape(text)
+                + "\",\"sessionId\":\"" + JsonUtils.escape(sessionId) + "\",\"token\":\"" + JsonUtils.escape(authToken) + "\"}");
     }
 
     public void sendAction(String action) {
-        if (isOpen()) send("{\"type\":\"action\",\"value\":\"" + action
-                + "\",\"sessionId\":\"" + sessionId + "\"}");
+        if (isOpen()) send("{\"type\":\"action\",\"value\":\"" + JsonUtils.escape(action)
+                + "\",\"sessionId\":\"" + JsonUtils.escape(sessionId) + "\",\"token\":\"" + JsonUtils.escape(authToken) + "\"}");
     }
 
     private String extractValue(String json, String key) {

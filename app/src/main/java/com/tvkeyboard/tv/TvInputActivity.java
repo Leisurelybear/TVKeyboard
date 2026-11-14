@@ -17,6 +17,7 @@ import com.tvkeyboard.common.NetworkUtils;
 import com.tvkeyboard.common.QrCodeGenerator;
 import com.tvkeyboard.common.TvHttpServer;
 import com.tvkeyboard.common.TvWebSocketServer;
+import com.tvkeyboard.common.TvServerManager;
 
 /**
  * TV standalone activity (App mode, not IME).
@@ -58,7 +59,9 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
 
     private void startServers() {
         String ip = NetworkUtils.getLocalIpAddress(this);
-        String url = NetworkUtils.buildQrContent(ip, TvHttpServer.HTTP_PORT);
+        TvServerManager.register(this, this);
+        wsServer = TvServerManager.getWebSocketServer();
+        String url = NetworkUtils.buildQrContent(ip, TvHttpServer.HTTP_PORT, TvServerManager.getToken());
 
         tvIpAddress.setText(ip);
         if (tvUrl != null) tvUrl.setText(url);
@@ -67,16 +70,6 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
         Bitmap bmp = QrCodeGenerator.generate(url, sizePx);
         if (bmp != null) ivQrCode.setImageBitmap(bmp);
 
-        wsServer = new TvWebSocketServer(TvWebSocketServer.DEFAULT_PORT, this);
-        wsServer.setConnectionLostTimeout(30);
-        try { wsServer.start(); } catch (Exception e) {
-            Toast.makeText(this, "WebSocket 启动失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
-
-        httpServer = new TvHttpServer(TvWebSocketServer.DEFAULT_PORT);
-        try { httpServer.start(); } catch (Exception e) {
-            Toast.makeText(this, "HTTP 服务启动失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
     }
 
     // ---- WebSocket callbacks ----
@@ -115,7 +108,7 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
                 case "confirm":   onConfirm(); break;
                 case "backspace":
                     if (!currentText.isEmpty()) {
-                        currentText = currentText.substring(0, currentText.length() - 1);
+                        currentText = currentText.substring(0, currentText.offsetByCodePoints(currentText.length(), -1));
                         updateInputDisplay(currentText);
                         if (wsServer != null) wsServer.broadcastSync(currentText, "tv");
                     }
@@ -152,7 +145,6 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (wsServer != null) try { wsServer.stop(1000); } catch (Exception ignored) {}
-        if (httpServer != null) httpServer.stop();
+        TvServerManager.unregister(this);
     }
 }

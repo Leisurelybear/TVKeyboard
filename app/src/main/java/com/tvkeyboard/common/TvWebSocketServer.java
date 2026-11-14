@@ -29,20 +29,27 @@ public class TvWebSocketServer extends WebSocketServer {
     }
 
     private final Listener listener;
+    private final String authToken;
 
     // conn → sessionId
     private final Map<WebSocket, String> sessionMap = new ConcurrentHashMap<>();
     // sessionId → conn
     private final Map<String, WebSocket> connMap = new ConcurrentHashMap<>();
 
-    public TvWebSocketServer(int port, Listener listener) {
+    public TvWebSocketServer(int port, Listener listener, String authToken) {
         super(new InetSocketAddress(port));
         this.listener = listener;
+        this.authToken = authToken;
         setReuseAddr(true);
     }
 
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        String origin = handshake.getFieldValue("Origin");
+        if (origin != null && !origin.isEmpty() && !origin.startsWith("http://") && !origin.startsWith("https://")) {
+            conn.close(1008, "Invalid origin");
+            return;
+        }
         String tempId = "tmp_" + System.currentTimeMillis();
         sessionMap.put(conn, tempId);
     }
@@ -61,6 +68,11 @@ public class TvWebSocketServer extends WebSocketServer {
         try {
             String type = extractJsonValue(message, "type");
             String sessionId = extractJsonValue(message, "sessionId");
+            String token = extractJsonValue(message, "token");
+            if (authToken != null && !authToken.equals(token)) {
+                conn.close(1008, "Unauthorized");
+                return;
+            }
 
             if (!sessionId.isEmpty()) {
                 String oldId = sessionMap.get(conn);
@@ -131,15 +143,7 @@ public class TvWebSocketServer extends WebSocketServer {
         return sessionMap.size();
     }
 
-    private String extractJsonValue(String json, String key) {
-        String search = "\"" + key + "\":\"";
-        int start = json.indexOf(search);
-        if (start < 0) return "";
-        start += search.length();
-        int end = json.indexOf("\"", start);
-        if (end < 0) return "";
-        return unescapeJson(json.substring(start, end));
-    }
+    private String extractJsonValue(String json, String key) { return JsonUtils.extractString(json, key); }
 
     private String escapeJson(String s) {
         if (s == null) return "";
@@ -148,7 +152,6 @@ public class TvWebSocketServer extends WebSocketServer {
     }
 
     private String unescapeJson(String s) {
-        return s.replace("\\\"", "\"").replace("\\n", "\n")
-                .replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\");
+        return JsonUtils.extractString("{\"v\":\"" + s + "\"}", "v");
     }
 }

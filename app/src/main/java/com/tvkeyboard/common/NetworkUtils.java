@@ -23,7 +23,9 @@ public class NetworkUtils {
         try {
             Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
             while (ifaces.hasMoreElements()) {
-                Enumeration<InetAddress> addrs = ifaces.nextElement().getInetAddresses();
+                NetworkInterface iface = ifaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual() || iface.getName().toLowerCase().contains("tun")) continue;
+                Enumeration<InetAddress> addrs = iface.getInetAddresses();
                 while (addrs.hasMoreElements()) {
                     InetAddress a = addrs.nextElement();
                     if (!a.isLoopbackAddress() && a.getHostAddress().contains("."))
@@ -32,7 +34,7 @@ public class NetworkUtils {
             }
         } catch (Exception e) { e.printStackTrace(); }
 
-        return "127.0.0.1";
+        return "";
     }
 
     /**
@@ -41,6 +43,10 @@ public class NetworkUtils {
      */
     public static String buildQrContent(String ip, int httpPort) {
         return "http://" + ip + ":" + httpPort;
+    }
+
+    public static String buildQrContent(String ip, int httpPort, String token) {
+        return "http://" + ip + ":" + httpPort + (token == null || token.isEmpty() ? "" : "?token=" + token + "&wsPort=8765");
     }
 
     /** Legacy WebSocket URL parser for native phone app (kept for compatibility) */
@@ -54,8 +60,13 @@ public class NetworkUtils {
         // strip path
         int slash = rest.indexOf('/');
         if (slash >= 0) rest = rest.substring(0, slash);
+        int query = rest.indexOf('?');
+        String queryPart = query >= 0 ? rest.substring(query + 1) : "";
+        if (query >= 0) rest = rest.substring(0, query);
         int colon = rest.lastIndexOf(':');
         if (colon < 0) return null;
-        return new String[]{rest.substring(0, colon), rest.substring(colon + 1)};
+        String token = "";
+        for (String item : queryPart.split("&")) if (item.startsWith("token=")) token = item.substring(6);
+        return new String[]{rest.substring(0, colon), "8765", token};
     }
 }

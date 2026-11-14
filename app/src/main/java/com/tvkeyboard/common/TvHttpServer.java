@@ -8,6 +8,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,22 +23,26 @@ public class TvHttpServer {
     private static final String TAG = "TvHttpServer";
 
     private ServerSocket serverSocket;
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newFixedThreadPool(8);
     private volatile boolean running = false;
     private final int wsPort;
+    private final String authToken;
 
-    public TvHttpServer(int wsPort) {
+    public TvHttpServer(int wsPort, String authToken) {
         this.wsPort = wsPort;
+        this.authToken = authToken;
     }
 
     public void start() throws IOException {
-        serverSocket = new ServerSocket(HTTP_PORT);
+        serverSocket = new ServerSocket();
         serverSocket.setReuseAddress(true);
+        serverSocket.bind(new InetSocketAddress(HTTP_PORT));
         running = true;
         executor.execute(() -> {
             while (running) {
                 try {
                     Socket client = serverSocket.accept();
+                    client.setSoTimeout(5000);
                     executor.execute(() -> handleClient(client));
                 } catch (IOException e) {
                     if (running) Log.e(TAG, "Accept error", e);
@@ -64,11 +69,32 @@ public class TvHttpServer {
             String requestLine = reader.readLine();
             if (requestLine == null) return;
 
+            if (authToken != null && !authToken.isEmpty()) {
+                String[] requestParts = requestLine.split(" ");
+                String target = requestParts.length > 1 ? requestParts[1] : "";
+                int query = target.indexOf('?');
+                String supplied = "";
+                if (query >= 0) {
+                    for (String item : target.substring(query + 1).split("&")) {
+                        if (item.startsWith("token=")) supplied = item.substring(6);
+                    }
+                }
+                if (!authToken.equals(supplied)) {
+                    byte[] body = "Unauthorized".getBytes(StandardCharsets.UTF_8);
+                    String response = "HTTP/1.1 401 Unauthorized\r\nContent-Length: " + body.length + "\r\nConnection: close\r\n\r\n";
+                    OutputStream out = client.getOutputStream();
+                    out.write(response.getBytes(StandardCharsets.UTF_8));
+                    out.write(body);
+                    out.flush();
+                    return;
+                }
+            }
+
             // Read and discard headers
             String line;
             while ((line = reader.readLine()) != null && !line.isEmpty()) {}
 
-            String html = buildHtmlPage(wsPort);
+            String html = buildHtmlPage(wsPort, authToken);
             byte[] body = html.getBytes(StandardCharsets.UTF_8);
 
             String response = "HTTP/1.1 200 OK\r\n"
@@ -92,7 +118,7 @@ public class TvHttpServer {
      * Build the full HTML page with embedded JS WebSocket client.
      * The page connects to the TV's WebSocket server and syncs input in real time.
      */
-    private String buildHtmlPage(int wsPort) {
+    private String buildHtmlPage(int wsPort, String authToken) {
         return "<!DOCTYPE html>\n"
             + "<html lang=\"zh\">\n"
             + "<head>\n"
@@ -266,6 +292,7 @@ public class TvHttpServer {
             // Generate a unique session ID for this browser tab
             + "const sessionId = 'sess_' + Math.random().toString(36).slice(2, 10);\n"
             + "const wsPort = " + wsPort + ";\n"
+            + "const authToken = '" + escapeHtmlJs(authToken) + "';\n"
             + "const wsHost = location.hostname;\n"
             + "let ws = null;\n"
             + "let reconnectTimer = null;\n"
@@ -292,7 +319,7 @@ public class TvHttpServer {
             + "    statusText.textContent = '已连接';\n"
             + "    offlineNotice.style.display = 'none';\n"
             // Send hello with sessionId so TV knows who we are
-            + "    ws.send(JSON.stringify({type:'hello', sessionId}));\n"
+            + "    ws.send(JSON.stringify({type:'hello', sessionId, token:authToken}));\n"
             + "  };\n"
             + "  ws.onclose = () => {\n"
             + "    dot.className = 'status-dot error';\n"
@@ -340,14 +367,14 @@ public class TvHttpServer {
             + "\n"
             + "function sendText(text) {\n"
             + "  if (ws && ws.readyState === WebSocket.OPEN) {\n"
-            + "    ws.send(JSON.stringify({type:'text', value:text, sessionId}));\n"
+            + "    ws.send(JSON.stringify({type:'text', value:text, sessionId, token:authToken}));\n"
             + "    lastSentText = text;\n"
             + "  }\n"
             + "}\n"
             + "\n"
             + "function sendAction(action) {\n"
             + "  if (ws && ws.readyState === WebSocket.OPEN) {\n"
-            + "    ws.send(JSON.stringify({type:'action', value:action, sessionId}));\n"
+            + "    ws.send(JSON.stringify({type:'action', value:action, sessionId, token:authToken}));\n"
             + "  }\n"
             + "}\n"
             + "\n"
@@ -392,5 +419,10 @@ public class TvHttpServer {
             + "</script>\n"
             + "</body>\n"
             + "</html>\n";
+    }
+
+    private String escapeHtmlJs(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r");
     }
 }
