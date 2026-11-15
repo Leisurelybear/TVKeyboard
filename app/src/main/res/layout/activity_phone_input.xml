@@ -263,6 +263,25 @@
                     android:backgroundTint="#37474F"
                     android:textColor="#CCCCCC" />
 
+                <Button
+                    android:id="@+id/btn_volume_down"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="音量 -"
+                    android:textSize="14sp"
+                    android:backgroundTint="#37474F"
+                    android:textColor="#CCCCCC"
+                    android:layout_marginTop="8dp" />
+
+                <Button
+                    android:id="@+id/btn_volume_up"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="音量 +"
+                    android:textSize="14sp"
+                    android:backgroundTint="#37474F"
+                    android:textColor="#CCCCCC" />
+
             </LinearLayout>
 
         </LinearLayout>

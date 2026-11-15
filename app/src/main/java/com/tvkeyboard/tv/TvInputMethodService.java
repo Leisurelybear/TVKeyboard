@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.media.AudioManager;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -310,6 +311,12 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
                 case "back":
                     sendDownUpKeyEvents(KeyEvent.KEYCODE_BACK);
                     break;
+                case "volume_up":
+                    adjustVolume(AudioManager.ADJUST_RAISE);
+                    break;
+                case "volume_down":
+                    adjustVolume(AudioManager.ADJUST_LOWER);
+                    break;
             }
         });
     }
@@ -321,6 +328,11 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
         if (wsServer != null) wsServer.broadcastAction("confirmed");
         requestHideSelf(0);
+    }
+
+    private void adjustVolume(int direction) {
+        AudioManager audio = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audio != null) audio.adjustVolume(direction, AudioManager.FLAG_SHOW_UI);
     }
 
     private void clearInput() {

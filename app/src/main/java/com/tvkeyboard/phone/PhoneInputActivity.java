@@ -35,6 +35,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     private Button btnClear;
     private Button btnScan;
     private Button btnBack;
+    private Button btnVolumeDown, btnVolumeUp;
     private Button btnHistory;
     private Button btnDpadUp, btnDpadDown, btnDpadLeft, btnDpadRight, btnDpadCenter;
     private View layoutConnected;
@@ -64,6 +65,8 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         btnClear         = findViewById(R.id.btn_clear);
         btnScan          = findViewById(R.id.btn_scan);
         btnBack          = findViewById(R.id.btn_back);
+        btnVolumeDown    = findViewById(R.id.btn_volume_down);
+        btnVolumeUp      = findViewById(R.id.btn_volume_up);
         btnHistory       = findViewById(R.id.btn_history);
         btnDpadUp        = findViewById(R.id.btn_dpad_up);
         btnDpadDown      = findViewById(R.id.btn_dpad_down);
@@ -114,6 +117,8 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
 
         // 返回键 → 电视执行返回
         btnBack.setOnClickListener(v -> sendAction("back"));
+        btnVolumeDown.setOnClickListener(v -> sendAction("volume_down"));
+        btnVolumeUp.setOnClickListener(v -> sendAction("volume_up"));
 
         // 方向键
         btnDpadUp.setOnClickListener(v    -> sendAction("dpad_up"));
