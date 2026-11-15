@@ -227,7 +227,18 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         new Thread(() -> {
             try {
                 if (wsClient != null) try { wsClient.close(); } catch (Exception ignored) {}
-                PhoneWebSocketClient client = new PhoneWebSocketClient(fIp, fPort, token, this);
+                final PhoneWebSocketClient[] holder = new PhoneWebSocketClient[1];
+                PhoneWebSocketClient client = new PhoneWebSocketClient(fIp, fPort, token,
+                        new PhoneWebSocketClient.Listener() {
+                            private boolean active() { return holder[0] == wsClient && generation == reconnectGeneration; }
+                            @Override public void onConnected() { if (active()) PhoneInputActivity.this.onConnected(); }
+                            @Override public void onDisconnected(String reason) { if (active()) PhoneInputActivity.this.onDisconnected(reason); }
+                            @Override public void onSyncReceived(String text) { if (active()) PhoneInputActivity.this.onSyncReceived(text); }
+                            @Override public void onSessionsUpdate(int count) { if (active()) PhoneInputActivity.this.onSessionsUpdate(count); }
+                            @Override public void onActionReceived(String action) { if (active()) PhoneInputActivity.this.onActionReceived(action); }
+                            @Override public void onError(String message) { if (active()) PhoneInputActivity.this.onError(message); }
+                        });
+                holder[0] = client;
                 wsClient = client;
                 if (!client.connectBlocking() && generation == reconnectGeneration) {
                     mainHandler.post(() -> scheduleReconnect(generation));

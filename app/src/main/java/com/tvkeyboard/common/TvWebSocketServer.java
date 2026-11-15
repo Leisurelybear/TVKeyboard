@@ -48,7 +48,7 @@ public class TvWebSocketServer extends WebSocketServer {
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
         String origin = handshake.getFieldValue("Origin");
-        if (!isAllowedOrigin(origin, conn)) {
+        if (!isAllowedOrigin(origin, handshake)) {
             conn.close(1008, "Invalid origin");
             return;
         }
@@ -153,17 +153,20 @@ public class TvWebSocketServer extends WebSocketServer {
         connMap.clear();
     }
 
-    private boolean isAllowedOrigin(String origin, WebSocket conn) {
+    private boolean isAllowedOrigin(String origin, ClientHandshake handshake) {
         if (origin == null || origin.isEmpty()) return true; // native client
         try {
             URI uri = new URI(origin);
             if (!"http".equalsIgnoreCase(uri.getScheme())) return false;
             if (uri.getHost() == null) return false;
-            InetSocketAddress local = (InetSocketAddress) conn.getLocalSocketAddress();
-            if (local == null || local.getAddress() == null) return false;
-            String localHost = local.getAddress().getHostAddress();
             int originPort = uri.getPort() < 0 ? 80 : uri.getPort();
-            return localHost.equals(uri.getHost()) && originPort == 8766;
+            if (originPort != 8766) return false;
+            String hostHeader = handshake.getFieldValue("Host");
+            if (hostHeader == null || hostHeader.isEmpty()) return false;
+            String host = hostHeader;
+            int colon = host.lastIndexOf(':');
+            if (colon > 0) host = host.substring(0, colon);
+            return host.equalsIgnoreCase(uri.getHost());
         } catch (URISyntaxException e) {
             return false;
         }
