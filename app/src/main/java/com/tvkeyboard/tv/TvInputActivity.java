@@ -9,6 +9,8 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.media.AudioManager;
+import android.view.KeyEvent;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -115,6 +117,9 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
                     break;
                 case "clear":   onClear(); break;
                 case "dismiss": finish(); break;
+                case "menu": dispatchRemoteKey(KeyEvent.KEYCODE_MENU); break;
+                case "volume_up": adjustVolume(AudioManager.ADJUST_RAISE); break;
+                case "volume_down": adjustVolume(AudioManager.ADJUST_LOWER); break;
             }
         });
     }
@@ -131,6 +136,17 @@ public class TvInputActivity extends AppCompatActivity implements TvWebSocketSer
             wsServer.broadcastSync("", "tv");
             wsServer.broadcastAction("cleared");
         }
+    }
+
+    private void adjustVolume(int direction) {
+        AudioManager audio = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audio != null) audio.adjustVolume(direction, AudioManager.FLAG_SHOW_UI);
+    }
+
+    private void dispatchRemoteKey(int keyCode) {
+        long now = System.currentTimeMillis();
+        getWindow().getDecorView().dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0));
+        getWindow().getDecorView().dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0));
     }
 
     private void updateInputDisplay(String text) {
