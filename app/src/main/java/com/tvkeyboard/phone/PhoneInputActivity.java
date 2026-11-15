@@ -16,6 +16,7 @@ import android.content.SharedPreferences;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -240,7 +241,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
                         });
                 holder[0] = client;
                 wsClient = client;
-                if (!client.connectBlocking() && generation == reconnectGeneration) {
+                if (!client.connectBlocking(8, TimeUnit.SECONDS) && generation == reconnectGeneration) {
                     mainHandler.post(() -> scheduleReconnect(generation));
                 }
                 if (generation != reconnectGeneration && client.isOpen()) client.close();

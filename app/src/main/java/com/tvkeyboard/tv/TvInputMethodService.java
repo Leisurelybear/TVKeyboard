@@ -69,7 +69,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     }
 
     private void startServers() {
-        if (!getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(PREF_REMOTE_ENABLED, true)) {
+        if (!isRemoteEnabled()) {
             wsServer = null;
             return;
         }
@@ -112,6 +112,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         });
         btnSwitchIme.setOnClickListener(v -> showImePicker());
         btnRemoteService.setOnClickListener(v -> toggleRemoteService());
+        btnRemoteService.setText(isRemoteEnabled() ? "停止远程" : "启动远程");
 
         applySizeMode();
 
@@ -120,6 +121,11 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     }
 
     private void setupQrCode() {
+        if (!isRemoteEnabled() || TvServerManager.getToken() == null) {
+            if (ivQrCode != null) ivQrCode.setImageDrawable(null);
+            if (tvIpAddress != null) tvIpAddress.setText("远程服务已停止");
+            return;
+        }
         String ip = NetworkUtils.getLocalIpAddress(this);
         String url = NetworkUtils.buildQrContent(ip, TvHttpServer.HTTP_PORT, TvServerManager.getToken());
 
@@ -165,6 +171,10 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         if (imm != null) imm.showInputMethodPicker();
     }
 
+    private boolean isRemoteEnabled() {
+        return getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(PREF_REMOTE_ENABLED, true);
+    }
+
     private void toggleRemoteService() {
         if (TvServerManager.getWebSocketServer() != null) {
             TvServerManager.disconnectAll();
@@ -178,9 +188,10 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
             startServers();
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(PREF_REMOTE_ENABLED, true).apply();
             setupQrCode();
-            btnRemoteService.setText("停止远程");
-            tvClientStatus.setText("等待扫码连接...");
-            tvClientStatus.setTextColor(0xFF888888);
+            boolean enabled = TvServerManager.getWebSocketServer() != null;
+            btnRemoteService.setText(enabled ? "停止远程" : "启动远程");
+            tvClientStatus.setText(enabled ? "等待扫码连接..." : "远程服务启动失败");
+            tvClientStatus.setTextColor(enabled ? 0xFF888888 : 0xFFFF6E6E);
         }
     }
 
@@ -319,6 +330,9 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
                     break;
                 case "back":
                     sendDownUpKeyEvents(KeyEvent.KEYCODE_BACK);
+                    break;
+                case "menu":
+                    showImePicker();
                     break;
                 case "volume_up":
                     adjustVolume(AudioManager.ADJUST_RAISE);

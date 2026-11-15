@@ -22,8 +22,15 @@ public final class TvServerManager {
             wsServer = new TvWebSocketServer(TvWebSocketServer.DEFAULT_PORT, new FanoutListener(), token);
             wsServer.setConnectionLostTimeout(30);
             try { wsServer.start(); } catch (Exception ignored) { wsServer = null; }
+            if (wsServer == null) return;
             httpServer = new TvHttpServer(TvWebSocketServer.DEFAULT_PORT, token);
             try { httpServer.start(); } catch (Exception ignored) { httpServer = null; }
+            if (httpServer == null) {
+                try { wsServer.stop(500); } catch (Exception ignored) {}
+                wsServer = null;
+                token = null;
+                return;
+            }
         }
         if (listener != null) LISTENERS.add(listener);
     }
