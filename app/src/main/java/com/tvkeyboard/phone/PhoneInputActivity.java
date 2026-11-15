@@ -11,6 +11,11 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.app.AlertDialog;
+import android.content.SharedPreferences;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -30,6 +35,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     private Button btnClear;
     private Button btnScan;
     private Button btnBack;
+    private Button btnHistory;
     private Button btnDpadUp, btnDpadDown, btnDpadLeft, btnDpadRight, btnDpadCenter;
     private View layoutConnected;
     private View layoutDisconnected;
@@ -58,6 +64,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         btnClear         = findViewById(R.id.btn_clear);
         btnScan          = findViewById(R.id.btn_scan);
         btnBack          = findViewById(R.id.btn_back);
+        btnHistory       = findViewById(R.id.btn_history);
         btnDpadUp        = findViewById(R.id.btn_dpad_up);
         btnDpadDown      = findViewById(R.id.btn_dpad_down);
         btnDpadLeft      = findViewById(R.id.btn_dpad_left);
@@ -67,13 +74,17 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         layoutDisconnected = findViewById(R.id.layout_disconnected);
 
         showDisconnected();
+        btnHistory.setOnClickListener(v -> showHistory());
 
         // 扫码连接
         btnScan.setOnClickListener(v ->
                 startActivityForResult(new Intent(this, QrScanActivity.class), REQUEST_QR_SCAN));
 
         // 确认输入
-        btnConfirm.setOnClickListener(v -> sendAction("confirm"));
+        btnConfirm.setOnClickListener(v -> {
+            saveHistory(etInput.getText().toString());
+            sendAction("confirm");
+        });
 
         // 取消
         btnDiscard.setOnClickListener(v -> {
@@ -133,6 +144,43 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         } else {
             Toast.makeText(this, "未连接到电视", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void saveHistory(String text) {
+        if (text == null || text.trim().isEmpty()) return;
+        SharedPreferences prefs = getSharedPreferences("phone_input", MODE_PRIVATE);
+        List<String> values = new ArrayList<>(Arrays.asList(prefs.getString("history", "").split("\\u0001", -1)));
+        values.remove("");
+        values.remove(text);
+        values.add(0, text);
+        if (values.size() > 20) values = new ArrayList<>(values.subList(0, 20));
+        prefs.edit().putString("history", joinHistory(values)).apply();
+    }
+
+    private String joinHistory(List<String> values) {
+        StringBuilder out = new StringBuilder();
+        for (String value : values) {
+            if (out.length() > 0) out.append('\u0001');
+            out.append(value.replace("\u0001", " "));
+        }
+        return out.toString();
+    }
+
+    private void showHistory() {
+        String raw = getSharedPreferences("phone_input", MODE_PRIVATE).getString("history", "");
+        if (raw.isEmpty()) {
+            Toast.makeText(this, "暂无历史输入", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] items = raw.split("\\u0001", -1);
+        new AlertDialog.Builder(this)
+                .setTitle("历史输入")
+                .setItems(items, (dialog, which) -> {
+                    etInput.setText(items[which]);
+                    etInput.setSelection(etInput.length());
+                })
+                .setNegativeButton("关闭", null)
+                .show();
     }
 
     @Override
