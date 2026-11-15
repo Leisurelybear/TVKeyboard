@@ -25,4 +25,9 @@ final class ConfirmKeyEventTracker {
         lastConfirmAt = now;
         return true;
     }
+
+    boolean shouldSuppressRapidPress() {
+        return lastConfirmAt > 0
+                && System.currentTimeMillis() - lastConfirmAt < DEBOUNCE_MS;
+    }
 }
