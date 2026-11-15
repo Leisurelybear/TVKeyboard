@@ -36,4 +36,14 @@ public class ConfirmKeyEventTrackerTest {
         assertFalse(tracker.onKeyUp(true));
         assertFalse(tracker.onKeyUp(false));
     }
+
+    @Test
+    public void debouncesRapidSecondPress() {
+        ConfirmKeyEventTracker tracker = new ConfirmKeyEventTracker();
+
+        tracker.onKeyDown(0);
+        assertTrue(tracker.onKeyUp(false));
+        tracker.onKeyDown(0);
+        assertFalse(tracker.onKeyUp(false));
+    }
 }
