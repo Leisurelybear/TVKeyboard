@@ -53,6 +53,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     private PanelSizeMode panelSizeMode = PanelSizeMode.TALL;
     private TextView btnSizeToggle;
     private TextView btnSwitchIme;
+    private TextView btnRemoteService;
     private View cardRemoteHint;
     private View bottomStrip;
     private View leftColumn;
@@ -90,6 +91,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
 
         btnSizeToggle  = inputView.findViewById(R.id.btn_size_toggle);
         btnSwitchIme   = inputView.findViewById(R.id.btn_switch_ime);
+        btnRemoteService = inputView.findViewById(R.id.btn_remote_service);
         cardRemoteHint = inputView.findViewById(R.id.card_remote_hint);
         bottomStrip    = inputView.findViewById(R.id.bottom_strip);
         leftColumn     = inputView.findViewById(R.id.left_column);
@@ -103,6 +105,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
             applySizeMode();
         });
         btnSwitchIme.setOnClickListener(v -> showImePicker());
+        btnRemoteService.setOnClickListener(v -> toggleRemoteService());
 
         applySizeMode();
 
@@ -154,6 +157,23 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     private void showImePicker() {
         InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (imm != null) imm.showInputMethodPicker();
+    }
+
+    private void toggleRemoteService() {
+        if (TvServerManager.getWebSocketServer() != null) {
+            TvServerManager.disconnectAll();
+            TvServerManager.stop();
+            wsServer = null;
+            btnRemoteService.setText("启动远程");
+            tvClientStatus.setText("远程服务已停止");
+            tvClientStatus.setTextColor(0xFFFFB74D);
+        } else {
+            startServers();
+            setupQrCode();
+            btnRemoteService.setText("停止远程");
+            tvClientStatus.setText("等待扫码连接...");
+            tvClientStatus.setTextColor(0xFF888888);
+        }
     }
 
     @Override

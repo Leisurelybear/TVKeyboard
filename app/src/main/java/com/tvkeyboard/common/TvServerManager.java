@@ -47,6 +47,7 @@ public final class TvServerManager {
     public static int getClientCount() { return wsServer == null ? 0 : wsServer.getConnectedClientCount(); }
     public static void broadcastSync(String text, String origin) { if (wsServer != null) wsServer.broadcastSync(text, origin); }
     public static void broadcastAction(String action) { if (wsServer != null) wsServer.broadcastAction(action); }
+    public static synchronized void disconnectAll() { if (wsServer != null) wsServer.disconnectAll("Disconnected by TV"); }
 
     private static String newToken() {
         byte[] bytes = new byte[18];

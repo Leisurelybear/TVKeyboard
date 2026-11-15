@@ -173,6 +173,19 @@
                 android:focusable="true"
                 android:background="@drawable/btn_secondary_bg" />
 
+            <TextView
+                android:id="@+id/btn_remote_service"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:gravity="center"
+                android:text="停止远程"
+                android:textSize="13sp"
+                android:textColor="#DDDDEE"
+                android:focusable="true"
+                android:background="@drawable/btn_secondary_bg" />
+
         </LinearLayout>
 
     </LinearLayout>

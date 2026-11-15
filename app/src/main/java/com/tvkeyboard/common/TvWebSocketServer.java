@@ -143,6 +143,14 @@ public class TvWebSocketServer extends WebSocketServer {
         return sessionMap.size();
     }
 
+    public void disconnectAll(String reason) {
+        for (WebSocket conn : sessionMap.keySet()) {
+            try { conn.close(1000, reason); } catch (Exception ignored) {}
+        }
+        sessionMap.clear();
+        connMap.clear();
+    }
+
     private String extractJsonValue(String json, String key) { return JsonUtils.extractString(json, key); }
 
     private String escapeJson(String s) {
