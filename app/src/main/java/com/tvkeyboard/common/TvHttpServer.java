@@ -317,7 +317,7 @@ public class TvHttpServer {
             + "const btnVolumeUp = document.getElementById('btnVolumeUp');\n"
             + "\n"
             + "function connect() {\n"
-            + "  ws = new WebSocket('ws://' + wsHost + ':' + wsPort);\n"
+            + "  ws = new WebSocket('ws://' + wsHost + ':' + wsPort + '?token=' + encodeURIComponent(authToken));\n"
             + "  ws.onopen = () => {\n"
             + "    dot.className = 'status-dot connected';\n"
             + "    statusText.textContent = '已连接';\n"

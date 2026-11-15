@@ -47,6 +47,10 @@ public class TvWebSocketServer extends WebSocketServer {
 
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        if (authToken != null && !authToken.equals(queryParameter(handshake.getResourceDescriptor(), "token"))) {
+            conn.close(1008, "Unauthorized");
+            return;
+        }
         String origin = handshake.getFieldValue("Origin");
         if (!isAllowedOrigin(origin, handshake)) {
             conn.close(1008, "Invalid origin");
@@ -170,6 +174,17 @@ public class TvWebSocketServer extends WebSocketServer {
         } catch (URISyntaxException e) {
             return false;
         }
+    }
+
+    private String queryParameter(String resource, String key) {
+        if (resource == null) return "";
+        int query = resource.indexOf('?');
+        if (query < 0) return "";
+        for (String item : resource.substring(query + 1).split("&")) {
+            int equals = item.indexOf('=');
+            if (equals > 0 && key.equals(item.substring(0, equals))) return item.substring(equals + 1);
+        }
+        return "";
     }
 
     private String extractJsonValue(String json, String key) { return JsonUtils.extractString(json, key); }

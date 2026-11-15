@@ -25,7 +25,7 @@ public class PhoneWebSocketClient extends WebSocketClient {
     private final String sessionId = "native_" + UUID.randomUUID().toString().substring(0, 8);
 
     public PhoneWebSocketClient(String tvIp, int port, String authToken, Listener listener) throws Exception {
-        super(new URI("ws://" + tvIp + ":" + port));
+        super(new URI("ws://" + tvIp + ":" + port + "?token=" + authToken));
         this.authToken = authToken;
         this.listener = listener;
     }
