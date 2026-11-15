@@ -45,7 +45,6 @@ public class PhoneWebSocketClient extends WebSocketClient {
                 listener.onSyncReceived(JsonUtils.extractString(message, "value"));
             } else if (message.contains("\"type\":\"sessions\"")) {
                 // extract count (numeric, not string)
-                String countStr = extractNumeric(message, "count");
                 listener.onSessionsUpdate(JsonUtils.extractInt(message, "count"));
             } else if (message.contains("\"type\":\"action\"")) {
                 listener.onActionReceived(JsonUtils.extractString(message, "value"));
