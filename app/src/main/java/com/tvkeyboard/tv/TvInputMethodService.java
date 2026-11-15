@@ -262,7 +262,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
                     break;
                 case "backspace":
                     if (!currentText.isEmpty()) {
-                        currentText = currentText.substring(0, currentText.length() - 1);
+                        currentText = currentText.substring(0, currentText.offsetByCodePoints(currentText.length(), -1));
                         updateDisplay(currentText);
                         if (getCurrentInputConnection() != null)
                             getCurrentInputConnection().setComposingText(currentText, 1);

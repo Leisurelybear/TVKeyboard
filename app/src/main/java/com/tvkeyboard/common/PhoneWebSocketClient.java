@@ -73,27 +73,4 @@ public class PhoneWebSocketClient extends WebSocketClient {
                 + "\",\"sessionId\":\"" + JsonUtils.escape(sessionId) + "\",\"token\":\"" + JsonUtils.escape(authToken) + "\"}");
     }
 
-    private String extractValue(String json, String key) {
-        String s = "\"" + key + "\":\"";
-        int i = json.indexOf(s); if (i < 0) return "";
-        i += s.length();
-        int j = json.indexOf("\"", i); if (j < 0) return "";
-        return json.substring(i, j).replace("\\\"","\"").replace("\\n","\n")
-                .replace("\\t","\t").replace("\\\\","\\");
-    }
-
-    private String extractNumeric(String json, String key) {
-        String s = "\"" + key + "\":";
-        int i = json.indexOf(s); if (i < 0) return "0";
-        i += s.length();
-        int j = i;
-        while (j < json.length() && Character.isDigit(json.charAt(j))) j++;
-        return json.substring(i, j);
-    }
-
-    private String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\\","\\\\").replace("\"","\\\"")
-                .replace("\n","\\n").replace("\r","\\r").replace("\t","\\t");
-    }
 }

@@ -151,7 +151,4 @@ public class TvWebSocketServer extends WebSocketServer {
                 .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
-    private String unescapeJson(String s) {
-        return JsonUtils.extractString("{\"v\":\"" + s + "\"}", "v");
-    }
 }
