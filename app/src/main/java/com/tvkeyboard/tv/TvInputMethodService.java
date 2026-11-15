@@ -185,8 +185,8 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
             tvClientStatus.setText("远程服务已停止");
             tvClientStatus.setTextColor(0xFFFFB74D);
         } else {
-            startServers();
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(PREF_REMOTE_ENABLED, true).apply();
+            startServers();
             setupQrCode();
             boolean enabled = TvServerManager.getWebSocketServer() != null;
             btnRemoteService.setText(enabled ? "停止远程" : "启动远程");
