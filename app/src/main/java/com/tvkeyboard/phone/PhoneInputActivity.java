@@ -36,6 +36,13 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
 
     private PhoneWebSocketClient wsClient;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private String lastIp;
+    private String lastToken;
+    private int lastPort;
+    private boolean reconnecting;
+    private final Runnable reconnectTask = () -> {
+        if (lastIp != null && !isFinishing()) connectToTv(lastIp, lastPort, lastToken);
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,12 +153,21 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         int port = 8765;
         try { port = Integer.parseInt(parts[1]); } catch (Exception ignored) {}
         String token = parts.length > 2 ? parts[2] : "";
+        connectToTv(ip, port, token);
+    }
+
+    private void connectToTv(String ip, int port, String token) {
+        lastIp = ip;
+        lastPort = port;
+        lastToken = token;
+        reconnecting = true;
 
         tvStatus.setText("连接中... " + ip);
         final String fIp = ip;
         final int fPort = port;
         new Thread(() -> {
             try {
+                if (wsClient != null) try { wsClient.close(); } catch (Exception ignored) {}
                 wsClient = new PhoneWebSocketClient(fIp, fPort, token, this);
                 wsClient.connectBlocking();
             } catch (Exception e) {
@@ -165,6 +181,8 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     @Override
     public void onConnected() {
         mainHandler.post(() -> {
+            reconnecting = false;
+            mainHandler.removeCallbacks(reconnectTask);
             showConnected();
             String text = etInput.getText().toString();
             if (!text.isEmpty() && wsClient != null) wsClient.sendText(text);
@@ -175,7 +193,11 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     public void onDisconnected(String reason) {
         mainHandler.post(() -> {
             showDisconnected();
-            Toast.makeText(this, "连接断开", Toast.LENGTH_SHORT).show();
+            if (lastIp != null && !isFinishing()) {
+                tvStatus.setText("连接断开，3 秒后重连...");
+                mainHandler.removeCallbacks(reconnectTask);
+                mainHandler.postDelayed(reconnectTask, 3000);
+            }
         });
     }
 
@@ -222,6 +244,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        mainHandler.removeCallbacks(reconnectTask);
         if (wsClient != null) try { wsClient.close(); } catch (Exception ignored) {}
     }
 }
