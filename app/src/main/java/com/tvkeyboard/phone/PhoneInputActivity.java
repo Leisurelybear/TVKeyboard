@@ -217,6 +217,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     }
 
     private void connectToTv(String ip, int port, String token) {
+        mainHandler.removeCallbacks(reconnectTask);
         lastIp = ip;
         lastPort = port;
         lastToken = token;
