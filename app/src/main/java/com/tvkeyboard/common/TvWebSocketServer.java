@@ -5,6 +5,8 @@ import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,7 +48,7 @@ public class TvWebSocketServer extends WebSocketServer {
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
         String origin = handshake.getFieldValue("Origin");
-        if (origin != null && !origin.isEmpty() && !origin.startsWith("http://") && !origin.startsWith("https://")) {
+        if (!isAllowedOrigin(origin, conn)) {
             conn.close(1008, "Invalid origin");
             return;
         }
@@ -149,6 +151,22 @@ public class TvWebSocketServer extends WebSocketServer {
         }
         sessionMap.clear();
         connMap.clear();
+    }
+
+    private boolean isAllowedOrigin(String origin, WebSocket conn) {
+        if (origin == null || origin.isEmpty()) return true; // native client
+        try {
+            URI uri = new URI(origin);
+            if (!"http".equalsIgnoreCase(uri.getScheme())) return false;
+            if (uri.getHost() == null) return false;
+            InetSocketAddress local = (InetSocketAddress) conn.getLocalSocketAddress();
+            if (local == null || local.getAddress() == null) return false;
+            String localHost = local.getAddress().getHostAddress();
+            int originPort = uri.getPort() < 0 ? 80 : uri.getPort();
+            return localHost.equals(uri.getHost()) && originPort == 8766;
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 
     private String extractJsonValue(String json, String key) { return JsonUtils.extractString(json, key); }

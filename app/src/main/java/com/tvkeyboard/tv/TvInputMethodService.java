@@ -50,6 +50,7 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
 
     private static final String PREFS_NAME = "ime_panel_prefs";
     private static final String PREF_HEIGHT_FRACTION = "height_fraction";
+    private static final String PREF_REMOTE_ENABLED = "remote_enabled";
 
     private PanelSizeMode panelSizeMode = PanelSizeMode.TALL;
     private TextView btnSizeToggle;
@@ -68,6 +69,10 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     }
 
     private void startServers() {
+        if (!getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(PREF_REMOTE_ENABLED, true)) {
+            wsServer = null;
+            return;
+        }
         TvServerManager.register(this, this);
         wsServer = TvServerManager.getWebSocketServer();
     }
@@ -164,12 +169,14 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
         if (TvServerManager.getWebSocketServer() != null) {
             TvServerManager.disconnectAll();
             TvServerManager.stop();
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(PREF_REMOTE_ENABLED, false).apply();
             wsServer = null;
             btnRemoteService.setText("启动远程");
             tvClientStatus.setText("远程服务已停止");
             tvClientStatus.setTextColor(0xFFFFB74D);
         } else {
             startServers();
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(PREF_REMOTE_ENABLED, true).apply();
             setupQrCode();
             btnRemoteService.setText("停止远程");
             tvClientStatus.setText("等待扫码连接...");
@@ -194,8 +201,9 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
-            if (!panelVisible) return super.onKeyDown(keyCode, event);
-            if (inputView == null || inputView.getVisibility() != View.VISIBLE) return super.onKeyDown(keyCode, event);
+            if (!panelVisible || inputView == null || inputView.getVisibility() != View.VISIBLE) {
+                return confirmKeyTracker.shouldSuppressRapidPress();
+            }
             confirmKeyTracker.onKeyDown(event.getRepeatCount());
             return true;
         }
@@ -213,8 +221,9 @@ public class TvInputMethodService extends InputMethodService implements TvWebSoc
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (ConfirmKeyEventTracker.isConfirmKey(keyCode)) {
-            if (!panelVisible) return super.onKeyUp(keyCode, event);
-            if (inputView == null || inputView.getVisibility() != View.VISIBLE) return super.onKeyUp(keyCode, event);
+            if (!panelVisible || inputView == null || inputView.getVisibility() != View.VISIBLE) {
+                return confirmKeyTracker.shouldSuppressRapidPress();
+            }
             if (confirmKeyTracker.onKeyUp(event.isCanceled())) confirmInput();
             return true;
         }

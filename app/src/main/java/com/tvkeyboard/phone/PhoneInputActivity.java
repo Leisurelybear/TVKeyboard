@@ -47,7 +47,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     private String lastIp;
     private String lastToken;
     private int lastPort;
-    private boolean reconnecting;
+    private int reconnectGeneration;
     private final Runnable reconnectTask = () -> {
         if (lastIp != null && !isFinishing()) connectToTv(lastIp, lastPort, lastToken);
     };
@@ -129,7 +129,10 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         btnDpadLeft.setOnClickListener(v  -> sendAction("dpad_left"));
         btnDpadRight.setOnClickListener(v -> sendAction("dpad_right"));
         // OK键 = 确认输入
-        btnDpadCenter.setOnClickListener(v -> sendAction("confirm"));
+        btnDpadCenter.setOnClickListener(v -> {
+            saveHistory(etInput.getText().toString());
+            sendAction("confirm");
+        });
 
         // 实时同步文字
         etInput.addTextChangedListener(new TextWatcher() {
@@ -216,7 +219,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         lastIp = ip;
         lastPort = port;
         lastToken = token;
-        reconnecting = true;
+        final int generation = ++reconnectGeneration;
 
         tvStatus.setText("连接中... " + ip);
         final String fIp = ip;
@@ -224,10 +227,18 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         new Thread(() -> {
             try {
                 if (wsClient != null) try { wsClient.close(); } catch (Exception ignored) {}
-                wsClient = new PhoneWebSocketClient(fIp, fPort, token, this);
-                wsClient.connectBlocking();
+                PhoneWebSocketClient client = new PhoneWebSocketClient(fIp, fPort, token, this);
+                wsClient = client;
+                if (!client.connectBlocking() && generation == reconnectGeneration) {
+                    mainHandler.post(() -> scheduleReconnect(generation));
+                }
+                if (generation != reconnectGeneration && client.isOpen()) client.close();
             } catch (Exception e) {
-                mainHandler.post(() -> tvStatus.setText("连接失败: " + e.getMessage()));
+                if (generation == reconnectGeneration) {
+                    mainHandler.post(() -> {
+                        scheduleReconnect(generation);
+                    });
+                }
             }
         }).start();
     }
@@ -237,7 +248,6 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     @Override
     public void onConnected() {
         mainHandler.post(() -> {
-            reconnecting = false;
             mainHandler.removeCallbacks(reconnectTask);
             showConnected();
             String text = etInput.getText().toString();
@@ -249,11 +259,7 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
     public void onDisconnected(String reason) {
         mainHandler.post(() -> {
             showDisconnected();
-            if (lastIp != null && !isFinishing()) {
-                tvStatus.setText("连接断开，3 秒后重连...");
-                mainHandler.removeCallbacks(reconnectTask);
-                mainHandler.postDelayed(reconnectTask, 3000);
-            }
+            scheduleReconnect(reconnectGeneration);
         });
     }
 
@@ -278,7 +284,9 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
 
     @Override
     public void onError(String message) {
-        mainHandler.post(() -> Toast.makeText(this, "错误: " + message, Toast.LENGTH_SHORT).show());
+        mainHandler.post(() -> {
+            if (!isFinishing() && lastIp != null) scheduleReconnect(reconnectGeneration);
+        });
     }
 
     @Override
@@ -297,9 +305,17 @@ public class PhoneInputActivity extends AppCompatActivity implements PhoneWebSoc
         tvStatus.setText("未连接");
     }
 
+    private void scheduleReconnect(int generation) {
+        if (generation != reconnectGeneration || lastIp == null || isFinishing()) return;
+        tvStatus.setText("连接失败，3 秒后重试");
+        mainHandler.removeCallbacks(reconnectTask);
+        mainHandler.postDelayed(reconnectTask, 3000);
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        reconnectGeneration++;
         mainHandler.removeCallbacks(reconnectTask);
         if (wsClient != null) try { wsClient.close(); } catch (Exception ignored) {}
     }
